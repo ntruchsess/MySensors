@@ -3,6 +3,7 @@
  * Copyright (C) 2013 Henrik Ekblad <henrik.ekblad@gmail.com>
  * 
  * Contribution by a-lurker
+ * Contribution by Norbert Truchsess <norbert.truchsess@t-online.de>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -14,6 +15,8 @@
  *
  * The GW code is designed for Arduino 328p / 16MHz.  ATmega168 does not have enough memory to run this program.
  * 
+ * Not compatible with Arduino IDE < 1.0.6 / 1.5.7 (use of EthernetClient operator ==)
+ *
  * COMPILING ENC28J60
  * > Use Arduino IDE 1.5.7 (or later) 
  * > Disable DEBUG in Sensor.h before compiling this sketch. Othervise the sketch will probably not fit in program space when downloading. 
@@ -21,7 +24,7 @@
  * COMPILING WizNET (W5100)
  * > Remove UIPEthernet include below and include Ethernet.h.  
  *
- * Note that I had to disable UDP and DHCP support in uipethernet-conf.h to reduce space. (which meas you ave to choose a static IP for that module)
+ * Note that I had to disable UDP and DHCP support in uipethernet-conf.h to reduce space. (which meas you have to choose a static IP for that module)
 
  * VERA CONFIGURATION:
  * Enter "ip-number:port" in the ip-field of the Arduino GW device. This will temporarily override any serial configuration for the Vera plugin. 
@@ -80,6 +83,9 @@ byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  // DEAD BEEF FEED
 // a R/W server on the port
 EthernetServer server = EthernetServer(IP_PORT);
 
+// handle to open connection
+EthernetClient client = EthernetClient();
+
 // No blink or button functionality. Use the vanilla constructor.
 MyGateway gw(RADIO_CE_PIN, RADIO_SPI_SS_PIN, INCLUSION_MODE_TIME);
 
@@ -106,7 +112,7 @@ void setup()
 
 // This will be called when data should be written to ethernet 
 void writeEthernet(char *writeBuffer) {
-  server.write(writeBuffer);
+  client.write(writeBuffer);
 }
 
 
@@ -114,11 +120,21 @@ void loop()
 {
   // if an incoming client connects, there will be
   // bytes available to read via the client object
-  EthernetClient client = server.available();
+  EthernetClient newclient = server.available();
+  // if a new client connects make sure to dispose any previous existing sockets
+  if (newclient) {
+    if (client != newclient) {
+      client.stop();
+      client = newclient;
+      client.print(F("0;0;3;0;14;Gateway startup complete.\n"));
+    }
+  }
 
   if (client) {
+      if (!client.connected()) {
+        client.stop();
       // if got 1 or more bytes
-      if (client.available()) {
+      } else if (client.available()) {
          // read the bytes incoming from the client
          char inChar = client.read();
 
